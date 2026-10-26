@@ -1,0 +1,33 @@
+pipeline {
+  agent any
+  environment {
+    AWS_REGION = 'ap-south-1'
+    ACCOUNT_ID = '777035566070'      // <-- your 12-digit AWS account ID
+    REPO       = 'my-app'
+    CLUSTER    = 'my-cluster'
+    SERVICE    = 'my-service'
+    ECR        = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+  }
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
+    }
+    stage('Build image') {
+      steps { sh 'docker build -t $REPO:latest .' }
+    }
+    stage('Push to ECR') {
+      steps {
+        sh '''
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR
+          docker tag $REPO:latest $ECR/$REPO:latest
+          docker push $ECR/$REPO:latest
+        '''
+      }
+    }
+    stage('Deploy to ECS') {
+      steps {
+        sh 'aws ecs update-service --cluster $CLUSTER --service $SERVICE --force-new-deployment --region $AWS_REGION'
+      }
+    }
+  }
+}
